@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from bot.utils.filters import IsAdmin  
 from aiogram.fsm.context import FSMContext
 
@@ -12,6 +12,8 @@ from bot.db.database import async_session_maker
 from bot.db.models import Schedule
 
 from sqlalchemy import select, delete
+
+from aiogram.exceptions import TelegramBadRequest
 
 
 
@@ -36,7 +38,7 @@ async def cmd_admin_panel(message: Message):
 async def start_add_lesson(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "➕ <b>Добавление пары</b>\n\nВыберите день:",
-        reply_markup=Keyboards.get_admin_days_keyboard('add', from_menu="admin"),  # Префикс admin_add_day_
+        reply_markup=Keyboards.get_admin_days_keyboard(action='add', from_menu="admin"),  # Префикс admin_add_day_
         parse_mode="HTML"
     )
     await callback.answer()
@@ -46,26 +48,34 @@ async def start_add_lesson(callback: CallbackQuery, state: FSMContext):
 async def start_delete_lesson(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "➖ <b>Удаление пары</b>\n\nВыберите день:",
-        reply_markup=Keyboards.get_admin_days_keyboard('del', from_menu="admin"),  # Префикс admin_del_day_
+        reply_markup=Keyboards.get_admin_days_keyboard(action='del', from_menu="admin"),  # Префикс admin_del_day_
         parse_mode="HTML"
     )
     await callback.answer()
 
 # === ОБРАБОТКА ВЫБОРА ДНЯ (УНИВЕРСАЛЬНАЯ) ===
-@router_admin.callback_query(F.data.startswith("admin_add_day_"))
+@router_admin.callback_query(F.data.startswith("add_"))
 async def add_lesson_select_day(callback: CallbackQuery, state: FSMContext):
-    day_id = callback.data.split("_")[-1]
+    day_id = callback.data.split("_")[1].split("|")[0]
     await state.update_data(day=day_id, from_menu="admin")
-    await callback.message.edit_text(
-        f"📅 День: <b>{DAYS[day_id]}</b>\n\nВведите номер пары (1, 2, 3...):",
-        parse_mode="HTML"
-    )
+    
+    try:
+        await callback.message.edit_text(
+            f"📅 День: <b>{DAYS[day_id]}</b>\n\nВведите номер пары (1, 2, 3...):",
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest:
+        await callback.answer()
+        return
+
     await state.set_state(ScheduleAdd.lesson_number)
     await callback.answer()
 
-@router_admin.callback_query(F.data.startswith("admin_del_day_"))
+@router_admin.callback_query(F.data.startswith("del_"))
 async def delete_lesson_select_day(callback: CallbackQuery, state: FSMContext):
-    day_id = callback.data.split("_")[-1]
+    # Парсим: del_monday|admin -> day_id = monday
+    day_id = callback.data.split("_")[1].split("|")[0]
+    
     await state.update_data(day=day_id)
     
     async with async_session_maker() as session:
@@ -74,62 +84,107 @@ async def delete_lesson_select_day(callback: CallbackQuery, state: FSMContext):
         )
         lessons = result.scalars().all()
     
+    # Исправлено: callback_data теперь ведет на существующий хендлер admin_del_select_day
+    keyboard_empty = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад к дням", callback_data="admin_del_select_day")]
+    ])
+
     if not lessons:
-        await callback.message.edit_text("📭 На этот день пар нет.")
+        try:
+            await callback.message.edit_text(
+                "📭 На этот день пар нет.", 
+                reply_markup=keyboard_empty
+            )
+        except TelegramBadRequest:
+            # Исправлено: reply_markup нельзя передать в answer(), он не сменит кнопки сообщения
+            await callback.answer("📭 На этот день пар нет.", show_alert=True)
         return
     
     text = f"📅 {DAYS[day_id]}\n\nВыберите пару для удаления:\n"
     keyboard = []
     for lesson in lessons:
-        # Уникальный callback для удаления конкретной пары
         keyboard.append([InlineKeyboardButton(
             text=f"{lesson.lesson_number}. {lesson.subject}",
             callback_data=f"admin_del_confirm_{lesson.id}"
         )])
     keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_del_select_day")])
     
-    from aiogram.types import InlineKeyboardMarkup
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
-        parse_mode="HTML"
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest:
+        await callback.answer()
+        return
+    
     await callback.answer()
 
 
 @router_admin.callback_query(F.data.startswith("admin_del_confirm_"))
 async def confirm_delete(callback: CallbackQuery, state: FSMContext):
-    lesson_id = int(callback.data.split("_")[-1])
-    
-    async with async_session_maker() as session:
-        await session.execute(delete(Schedule).where(Schedule.id == lesson_id))
-        await session.commit()
-    
-    await callback.message.edit_text(
-        "✅ Пара удалена!",
-        reply_markup=Keyboards.get_admin_menu()
-    )
-    await callback.answer()
-    await state.clear()
+    try:
+        lesson_id_str = callback.data.split("_")[-1]
+        
+        if not lesson_id_str.isdigit():
+            await callback.answer("❌ Неверный ID", show_alert=True)
+            return
+        
+        lesson_id = int(lesson_id_str)
 
-# === КНОПКА "НАЗАД" (ИЗ АДМИНКИ В ГЛАВНОЕ МЕНЮ) ===
-@router_admin.callback_query(F.data == "admin_menu")
-async def back_to_admin_main(callback: CallbackQuery):
-    await callback.message.answer(
-        "👨‍🏫 <b>Панель старосты:</b>",
-        reply_markup=Keyboards.get_admin_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
+        async with async_session_maker() as session:
+            result = await session.execute(select(Schedule).where(Schedule.id == lesson_id))
+            lesson = result.scalar_one_or_none()
+            
+            if not lesson:
+                await callback.answer("⚠️ Пара не найдена", show_alert=True)
+                return
 
-# === КНОПКА "НАЗАД" (В ГЛАВНОЕ МЕНЮ БОТА) ===
-@router_admin.callback_query(F.data == "back_to_menu")
-async def back_to_main_menu(callback: CallbackQuery):
-    await callback.message.answer(
-        "📋 Главное меню:",
-        reply_markup=Keyboards.get_admin_menu()
-    )
-    await callback.answer()
+            lesson_subject = lesson.subject
+            
+            await session.delete(lesson)
+            await session.commit()
+
+        # === Создаем ПРАВИЛЬНУЮ inline-клавиатуру ===
+        # Вариант 1: Если у вас есть метод для inline-меню
+        # from_menu_keyboard = Keyboards.get_admin_inline_menu()
+        
+        # Вариант 2: Создаем вручную, если метода нет
+        from_menu_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить пару", callback_data="admin_add_select_day")],
+            [InlineKeyboardButton(text="➖ Удалить пару", callback_data="admin_del_select_day")]
+        ])
+
+        # === Обновляем сообщение ===
+        try:
+            await callback.message.edit_text(
+                f"✅ <b>{lesson_subject}</b> удалена!",
+                reply_markup=from_menu_keyboard,  # <-- Только InlineKeyboardMarkup!
+                parse_mode="HTML"
+            )
+        except TelegramBadRequest:
+            # Если edit_text не сработал — удаляем и отправляем новое
+            try:
+                await callback.message.delete()
+            except:
+                pass
+            await callback.message.answer(
+                f"✅ <b>{lesson_subject}</b> удалена!",
+                reply_markup=from_menu_keyboard,
+                parse_mode="HTML"
+            )
+        
+        await callback.answer()  # Пустой answer, чтобы убрать "часики"
+        await state.clear()
+        
+    except Exception as e:
+        # Логируем полную ошибку в консоль
+        print(f"❌ Ошибка при удалении: {type(e).__name__}: {e}")
+        
+        # В callback.answer отправляем ТОЛЬКО короткое сообщение (<200 символов!)
+        error_msg = f"❌ Ошибка: {type(e).__name__}"
+        await callback.answer(error_msg[:200], show_alert=True)
 
 
 @router_admin.message(StateFilter(ScheduleAdd.lesson_number))

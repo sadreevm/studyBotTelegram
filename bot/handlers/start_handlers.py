@@ -50,6 +50,7 @@ async def cmd_start(message: Message):
 
         if user.status == "admin":
             await message.answer("📋 Главное меню:", reply_markup=Keyboards.get_admin_menu())
+
         else:
             await message.answer("📋 Главное меню:", reply_markup=Keyboards.get_student_menu())
 
@@ -57,13 +58,26 @@ async def cmd_start(message: Message):
 @router_start.message(F.text == "🆘 Помощь")
 @router_start.message(Command('help'))
 async def cmd_help(message: Message):
-    await message.answer(
+    user_id = message.from_user.id
+    username = message.from_user.username
+
+    status = "admin" if user_id in Config.ADMIN_IDS else "student"
+    if status == "admin":
+        await message.answer(
         "🆘 <b>Доступные команды:</b>\n\n"
         "/start - Меню\n"
         "/schedule - Расписание\n"
         "/admin - Панель старосты",
         parse_mode="HTML"
     )
+    else:
+        await message.answer(
+        "🆘 <b>Доступные команды:</b>\n\n"
+        "/start - Меню\n"
+        "/schedule - Расписание\n",
+        parse_mode="HTML"
+    )
+
 
     # await message.answer(Messages.hello_message(Config.LINK_CHANNEL), reply_markup=Keyboards.inline_pay())
 #     await message.answer(text='Мне нужно вас зарегестрировать😉')

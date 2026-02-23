@@ -1,9 +1,9 @@
 from aiogram import Router, F
 from aiogram.filters import Command 
-from aiogram.types import Message, CallbackQuery\
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 from bot.utils.filters import IsStudent
-
 from bot.utils.keyboards import Keyboards, DAYS
 from bot.db.database import async_session_maker
 from sqlalchemy import select
@@ -16,19 +16,23 @@ router_student = Router()
 async def cmd_schedule(message: Message):
     await message.answer(
         "📅 <b>Выберите день недели:</b>",
-        reply_markup=Keyboards.get_days_keyboard(from_menu="main"),
+        reply_markup=Keyboards.get_admin_days_keyboard(action="view", from_menu="main"),
         parse_mode="HTML"
     )
 
-
 @router_student.callback_query(F.data.startswith("day_"))
 async def show_day_schedule(callback: CallbackQuery):
-    parts = callback.data.split("_from_")
-    day_id = parts[0].replace("day_", "")
-    from_menu = parts[1] if len(parts) > 1 else "main"
+    # 1. Парсинг данных
+    try:
+        day_part, from_menu = callback.data.split("|")
+        day_id = day_part.replace("day_", "")
+    except ValueError:
+        day_id = callback.data.replace("day_", "")
+        from_menu = "main"
     
     day_name = DAYS.get(day_id, day_id)
     
+    # 2. Получение пар из БД
     async with async_session_maker() as session:
         result = await session.execute(
             select(Schedule)
@@ -37,6 +41,7 @@ async def show_day_schedule(callback: CallbackQuery):
         )
         lessons = result.scalars().all()
     
+    # 3. Формирование текста
     if not lessons:
         text = f"📭 <b>{day_name}</b>\n\nНа этот день пар нет."
     else:
@@ -46,34 +51,44 @@ async def show_day_schedule(callback: CallbackQuery):
             text += f"   📚 {lesson.subject}\n"
             if lesson.classroom:
                 text += f"   🚪 Ауд. {lesson.classroom}\n"
+            if lesson.teacher:
+                text += f"   👨‍🏫 {lesson.teacher}\n"
             text += "\n"
     
-    # Передаём from_menu дальше
-    await callback.message.edit_text(
-        text, 
-        reply_markup=Keyboards.get_days_keyboard(from_menu=from_menu), 
-        parse_mode="HTML"
-    )
+    # 4. Формирование клавиатуры
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад к дням", callback_data=f"back_to_{from_menu}")]
+        ])
+    
+    # 5. Отправка сообщения
+    try:
+        await callback.message.edit_text(
+            text, 
+            reply_markup=keyboard, 
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest:
+        await callback.answer()
+        return
+    
     await callback.answer()
 
-# ✅ Кнопка "Назад"
+# ✅ ИЗМЕНЁННЫЙ ХЕНДЛЕР "НАЗАД"
 @router_student.callback_query(F.data.startswith("back_to_"))
 async def back_handler(callback: CallbackQuery):
     from_menu = callback.data.replace("back_to_", "")
     
-    if from_menu == "main":
-        # Возврат в главное меню
+    try:
+        # Вместо удаления — редактируем сообщение и показываем выбор дней
         await callback.message.edit_text(
-            "📋 Главное меню:",
-            reply_markup=Keyboards.get_student_menu()
-        )
-    elif from_menu == "admin":
-        # Возврат в админку
-        await callback.message.edit_text(
-            "👨‍🏫 <b>Панель старосты:</b>",
-            reply_markup=Keyboards.admin_menu(),
+            "📅 <b>Выберите день недели:</b>",
+            reply_markup=Keyboards.get_admin_days_keyboard(action="view", from_menu=from_menu),
             parse_mode="HTML"
         )
+    except TelegramBadRequest:
+        # Если сообщение не изменилось (например, быстро нажали)
+        await callback.answer()
+        return
     
     await callback.answer()
 

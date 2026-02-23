@@ -22,7 +22,16 @@ class Keyboards:
             [KeyboardButton(text="🆘 Помощь")],
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-        
+    
+
+    @staticmethod
+    def get_admin_inline_menu():
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить", callback_data="admin_add_select_day")],
+            [InlineKeyboardButton(text="➖ Удалить", callback_data="admin_del_select_day")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="cancel")]
+        ])
+
     @staticmethod
     def get_student_menu() -> ReplyKeyboardMarkup:
         keyboard = [
@@ -33,22 +42,17 @@ class Keyboards:
     
 
     @staticmethod
-    def get_days_keyboard(from_menu: str = "main") -> InlineKeyboardMarkup:
-        """
-        from_menu: "main" (главное меню) или "admin" (админка)
-        """
+    def get_admin_days_keyboard(action: str = "view", from_menu: str = "main") -> InlineKeyboardMarkup:
         keyboard = []
         for day_id, day_name in DAYS.items():
-            keyboard.append([InlineKeyboardButton(
-                text=day_name, 
-                callback_data=f"day_{day_id}_from_{from_menu}"
-            )])
-        
-        # Кнопка назад с информацией о предыдущем меню
-        keyboard.append([InlineKeyboardButton(
-            text="🔙 Назад", 
-            callback_data=f"back_to_{from_menu}"
-        )])
+            if action == "view":
+                cb_data = f"day_{day_id}|{from_menu}"
+            elif action == "add":
+                cb_data = f"add_{day_id}|{from_menu}"
+            elif action == "del":
+                cb_data = f"del_{day_id}|{from_menu}"
+            
+            keyboard.append([InlineKeyboardButton(text=day_name, callback_data=cb_data)])
         
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -56,29 +60,8 @@ class Keyboards:
     def get_admin_schedule_keyboard() -> InlineKeyboardMarkup:
         keyboard = [
             [InlineKeyboardButton(text="➕ Добавить пару", callback_data="admin_add_select_day")],
-            [InlineKeyboardButton(text="➖ Удалить пару", callback_data="admin_del_select_day")],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")],
+            [InlineKeyboardButton(text="➖ Удалить пару", callback_data="admin_del_select_day")]
         ]
-        return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-
-    @staticmethod
-    def get_admin_days_keyboard(action: str) -> InlineKeyboardMarkup:
-        """
-        action: 'add' или 'del'
-        """
-        keyboard = []
-        for day_id, day_name in DAYS.items():
-            if action == 'add':
-                # Для добавления: admin_add_day_monday
-                cb_data = f"admin_add_day_{day_id}"
-            else:
-                # Для удаления: admin_del_day_monday
-                cb_data = f"admin_del_day_{day_id}"
-            
-            keyboard.append([InlineKeyboardButton(text=day_name, callback_data=cb_data)])
-        
-        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_menu")])
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
