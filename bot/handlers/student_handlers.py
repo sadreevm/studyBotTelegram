@@ -9,20 +9,21 @@ from bot.db.database import async_session_maker
 from sqlalchemy import select
 from bot.db.models import Schedule
 
+
 router_student = Router()
+
 
 @router_student.message(F.text == "📅 Расписание")
 @router_student.message(Command('schedule'))
 async def cmd_schedule(message: Message):
     await message.answer(
         "📅 <b>Выберите день недели:</b>",
-        reply_markup=Keyboards.get_admin_days_keyboard(action="view", from_menu="main"),
+        reply_markup=Keyboards.get_student_days_keyboard(action="view", from_menu="main"),
         parse_mode="HTML"
     )
 
 @router_student.callback_query(F.data.startswith("day_"))
 async def show_day_schedule(callback: CallbackQuery):
-    # 1. Парсинг данных
     try:
         day_part, from_menu = callback.data.split("|")
         day_id = day_part.replace("day_", "")
@@ -32,7 +33,7 @@ async def show_day_schedule(callback: CallbackQuery):
     
     day_name = DAYS.get(day_id, day_id)
     
-    # 2. Получение пар из БД
+
     async with async_session_maker() as session:
         result = await session.execute(
             select(Schedule)
@@ -40,8 +41,8 @@ async def show_day_schedule(callback: CallbackQuery):
             .order_by(Schedule.lesson_number)
         )
         lessons = result.scalars().all()
-    
-    # 3. Формирование текста
+
+
     if not lessons:
         text = f"📭 <b>{day_name}</b>\n\nНа этот день пар нет."
     else:
@@ -54,13 +55,13 @@ async def show_day_schedule(callback: CallbackQuery):
             if lesson.teacher:
                 text += f"   👨‍🏫 {lesson.teacher}\n"
             text += "\n"
-    
-    # 4. Формирование клавиатуры
+
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔙 Назад к дням", callback_data=f"back_to_{from_menu}")]
         ])
-    
-    # 5. Отправка сообщения
+
+
     try:
         await callback.message.edit_text(
             text, 
@@ -73,24 +74,25 @@ async def show_day_schedule(callback: CallbackQuery):
     
     await callback.answer()
 
-# ✅ ИЗМЕНЁННЫЙ ХЕНДЛЕР "НАЗАД"
+
+# Возврат назад
 @router_student.callback_query(F.data.startswith("back_to_"))
 async def back_handler(callback: CallbackQuery):
     from_menu = callback.data.replace("back_to_", "")
     
     try:
-        # Вместо удаления — редактируем сообщение и показываем выбор дней
         await callback.message.edit_text(
             "📅 <b>Выберите день недели:</b>",
-            reply_markup=Keyboards.get_admin_days_keyboard(action="view", from_menu=from_menu),
+            reply_markup=Keyboards.get_student_days_keyboard(action="view", from_menu=from_menu),
             parse_mode="HTML"
         )
     except TelegramBadRequest:
-        # Если сообщение не изменилось (например, быстро нажали)
+
         await callback.answer()
         return
     
     await callback.answer()
+
 
 @router_student.message(F.text == "🆘 Помощь")
 @router_student.message(Command('help'))
