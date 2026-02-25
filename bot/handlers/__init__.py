@@ -5,12 +5,18 @@ from aiogram import Router
 from .start_handlers import router_start
 from .admin_handlers import router_admin
 from .student_handlers import router_student
+from .admin_files_handlers import router_files_admin
+from .student_files_handlers import router_files_student
+
 
 routes = [
     router_start,
     router_admin,
-    router_student
+    router_student,
+    router_files_admin,
+    router_files_student
 ]
+
 
 def setup_handlers(dp: Router):
     handlers_dir = os.path.dirname(__file__)

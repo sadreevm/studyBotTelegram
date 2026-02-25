@@ -22,6 +22,7 @@ db.sqlite3
 .env.local
 config.py
 secrets.json
+storage/
 
 # === IDE и редакторы ===
 .idea/

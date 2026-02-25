@@ -17,9 +17,8 @@ class Keyboards:
     @staticmethod
     def get_admin_menu() -> ReplyKeyboardMarkup:
         keyboard = [
-            [KeyboardButton(text="👨‍🏫 Админ-панель")],
-            [KeyboardButton(text="📅 Расписание")],
-            [KeyboardButton(text="🆘 Помощь")],
+            [KeyboardButton(text="👨‍🏫 Админ-панель"), KeyboardButton(text="📅 Расписание")],
+            [KeyboardButton(text="📚 Обычные файлы"), KeyboardButton(text="🆘 Помощь")]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
     
@@ -28,6 +27,7 @@ class Keyboards:
     def get_student_menu() -> ReplyKeyboardMarkup:
         keyboard = [
             [KeyboardButton(text="📅 Расписание")],
+            [KeyboardButton(text="📚 Обычные файлы")],
             [KeyboardButton(text="🆘 Помощь")],
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -115,22 +115,39 @@ class Keyboards:
                 cb_data = f"del_{day_id}|{from_menu}"
             
             keyboard.append([InlineKeyboardButton(text=day_name, callback_data=cb_data)])
-            
+
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-
-
-
-
-
-    # @staticmethod
-    # def example_keyboard():
-    #     return ReplyKeyboardMarkup(keyboard=[
-    #         [
-    #             KeyboardButton(text='Текст 1'),
-    #             KeyboardButton(text='Текст 2'),
-
-    #         ]
-    #     ], resize_keyboard=True, one_time_keyboard=False, )
+    @staticmethod
+    def get_file_categories() -> InlineKeyboardMarkup:
+        """Клавиатура с предустановленными категориями"""
+        keyboard = [
+            [
+                InlineKeyboardButton(text="📐 Математика", callback_data="category_math"),
+                InlineKeyboardButton(text="💻 Программирование", callback_data="category_programming"),
+            ],
+            [
+                InlineKeyboardButton(text="⚛️ Физика", callback_data="category_physics"),
+                InlineKeyboardButton(text="📦 Другое", callback_data="category_other"),
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_upload")]
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
     
+    @staticmethod
+    def get_categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
+        """Клавиатура со списком доступных категорий"""
+        keyboard = [
+            [InlineKeyboardButton(text=f"📁 {cat}", callback_data=f"files_in_{cat}")]
+            for cat in categories
+        ]
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_menu")])
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    
+    @staticmethod
+    def get_files_back_keyboard(category: str) -> InlineKeyboardMarkup:
+        """Кнопка возврата к списку категорий"""
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К категориям", callback_data="view_files")]
+        ])

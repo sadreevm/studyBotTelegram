@@ -23,3 +23,9 @@ class ScheduleAdd(StatesGroup):
     time_end = State()
     classroom = State()
     teacher = State()
+
+
+class FileUpload(StatesGroup):
+    waiting_for_category = State()
+    waiting_for_file = State()
+    waiting_for_filename = State()

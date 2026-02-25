@@ -1,6 +1,9 @@
-from sqlalchemy import Column, Integer, String, JSON, Boolean, DateTime, func
+from sqlalchemy import Column, Integer, String, JSON, Boolean, DateTime, func, ForeignKey
 
 from bot.db.database import Base
+
+from sqlalchemy.orm import relationship
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -10,6 +13,7 @@ class User(Base):
     username = Column(String, nullable=True)
     created_at = Column(DateTime, default=func.now())
     status = Column(String, nullable=True)
+    uploaded_files = relationship("FileDocument", back_populates="uploader", lazy="select")
 
     def __init__(self, user_id: int, username: str, status: str):
         self.user_id = user_id
@@ -44,3 +48,22 @@ class Dispatchers(Base):
 
     def __init__(self, username: str):
         self.username = username
+
+
+class FileDocument(Base):
+    __tablename__ = 'file_documents'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    file_name = Column(String, nullable=False)           # Оригинальное имя файла
+    file_path = Column(String, nullable=False)           # Путь к файлу на диске
+    file_extension = Column(String, nullable=False)      # Расширение: pdf, docx, png
+    category = Column(String, nullable=False, index=True) # Категория: math, programming, etc.
+    uploaded_by = Column(Integer, ForeignKey('users.id'), nullable=False)  # Кто загрузил
+    uploaded_at = Column(DateTime, default=func.now())
+    file_size = Column(Integer, nullable=False)          # Размер в байтах
+    
+    # Связь с пользователем
+    uploader = relationship("User", back_populates="uploaded_files")
+    
+    def __repr__(self):
+        return f"<FileDocument(name={self.file_name}, category={self.category})>"
