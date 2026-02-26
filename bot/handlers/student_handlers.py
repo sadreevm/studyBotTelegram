@@ -24,6 +24,7 @@ async def cmd_schedule(message: Message):
         parse_mode="HTML"
     )
 
+
 @router_student.callback_query(F.data.startswith("day_"))
 async def show_day_schedule(callback: CallbackQuery):
     try:

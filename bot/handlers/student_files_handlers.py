@@ -20,6 +20,7 @@ router_files_student = Router()
 # ==========================================
 
 @router_files_student.message(F.text == "📚 Обычные файлы")
+@router_files_student.message(Command('view_file'))
 async def open_files_from_menu(message: types.Message, session: AsyncSession):
     """Студент нажал кнопку '📚 Обычные файлы' в главном меню"""
     
@@ -36,7 +37,7 @@ async def open_files_from_menu(message: types.Message, session: AsyncSession):
         )
         return
     
-    # ✅ Используем префикс "files_in_" для обычных файлов
+   
     await message.answer(
         "📚 <b>Обычные файлы</b> (База знаний)\n\n"
         "📂 <b>Доступные категории:</b>\n\n" +
@@ -50,7 +51,7 @@ async def open_files_from_menu(message: types.Message, session: AsyncSession):
 # 2. ПРОСМОТР КАТЕГОРИЙ (Inline Callback)
 # ==========================================
 
-@router_files_student.callback_query(F.data == "view_common_files")  # ✅ FIX: view_common_files
+@router_files_student.callback_query(F.data == "view_common_files") 
 async def show_common_categories(callback: types.CallbackQuery, session: AsyncSession):
     """Показывает категории обычных файлов через inline-кнопку"""
     

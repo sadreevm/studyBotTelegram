@@ -38,7 +38,8 @@ class Keyboards:
             [KeyboardButton(text="📅 Расписание")],
             [
                 KeyboardButton(text="📚 Обычные файлы"),
-                KeyboardButton(text="🎓 Файлы сессий"),  # ✅ NEW
+                KeyboardButton(text="🎓 Файлы сессий"),
+                KeyboardButton(text="✨ События"),  # ✅ NEW
             ],
             [KeyboardButton(text="🆘 Помощь")],
         ]
@@ -103,6 +104,7 @@ class Keyboards:
         keyboard = [
             [InlineKeyboardButton(text="➕ Добавить событие", callback_data="admin_add_event")],
             [InlineKeyboardButton(text="➖ Удалить событие", callback_data="admin_del_event")],
+            [InlineKeyboardButton(text="📋 Показать все события", callback_data="admin_view_events")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="goto_back")],
         ]
         return InlineKeyboardMarkup(inline_keyboard=keyboard)

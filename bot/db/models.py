@@ -129,6 +129,20 @@ class Dispatchers(Base):
         self.username = username
 
 
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)      # Название события
+    event_date = Column(DateTime, nullable=False)    # Дата и время события
+    description = Column(String(1000), nullable=True)  # Описание (опционально)
+    created_at = Column(DateTime, default=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Кто создал
+
+    def __repr__(self):
+        return f"<Event(id={self.id}, title={self.title}, date={self.event_date})>"
+
+
 # ==========================================
 # 6. АВТО-УДАЛЕНИЕ ФАЙЛОВ (Хук)
 # ==========================================

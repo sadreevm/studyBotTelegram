@@ -36,3 +36,9 @@ class SessionFileUpload(StatesGroup):
     waiting_for_file = State()  # ← Это ДРУГОЕ состояние, несмотря на одинаковое имя!
     waiting_for_filename = State()
 
+
+class EventCreation(StatesGroup):
+    waiting_for_title = State()       # Ввод названия
+    waiting_for_date = State()        # Ввод даты
+    waiting_for_description = State() # Ввод описания (опционально)
+
