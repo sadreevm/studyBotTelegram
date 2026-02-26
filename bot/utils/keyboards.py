@@ -92,7 +92,7 @@ class Keyboards:
         # ✅ FIX: Исправлены callback_data (были от файлов, теперь заглушки или свои)
         keyboard = [
             [InlineKeyboardButton(text="➕ Добавить напоминание", callback_data="admin_add_reminder")],
-            [InlineKeyboardButton(text="➖ Удалить напоминание", callback_data="admin_del_reminder")],
+            [InlineKeyboardButton(text="📋 Редактировать напоминания", callback_data="admin_reminders_list")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="goto_back")],
         ]
         return InlineKeyboardMarkup(inline_keyboard=keyboard)

@@ -21,6 +21,7 @@ engine = create_async_engine(
 )
 
 
+
 async_session_maker = async_sessionmaker(
     engine, 
     class_=AsyncSession,  # Используем класс по умолчанию

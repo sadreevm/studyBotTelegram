@@ -21,7 +21,7 @@ router_start = Router()
 router_start.message.filter(lambda msg: msg.from_user.id) 
 
 @router_start.message(Command('start'))
-@router_start(F.text == "main_menu")
+@router_start.message(F.text == "main_menu")
 async def cmd_start(message: Message):
     user_id = message.from_user.id
     username = message.from_user.username

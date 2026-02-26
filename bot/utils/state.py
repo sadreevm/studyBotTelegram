@@ -42,3 +42,9 @@ class EventCreation(StatesGroup):
     waiting_for_date = State()        # Ввод даты
     waiting_for_description = State() # Ввод описания (опционально)
 
+
+class ReminderState(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_date = State()      
+    waiting_for_time = State()
+    waiting_for_text = State()

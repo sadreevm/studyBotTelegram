@@ -1,9 +1,10 @@
+# bot/db/models.py
 import uuid
 from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, BigInteger, event
 from sqlalchemy.orm import relationship, declarative_base
 from bot.db.database import Base
-# Импортируем твои утилиты для работы с диском
-from bot.utils.file_storage import delete_file 
+from bot.utils.file_storage import delete_file
+
 
 # ==========================================
 # 1. МОДЕЛЬ СЕССИИ (Учебная сессия)
@@ -11,25 +12,17 @@ from bot.utils.file_storage import delete_file
 class Session(Base):
     __tablename__ = "sessions"
     
-    # Используем UUID, чтобы ID сессии было сложно подобрать
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    
-    # Привязка к студенту
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Метаданные сессии
-    title = Column(String(100), nullable=True)       # Например: "Сессия 2024 Лето"
-    start_date = Column(DateTime, nullable=True)     # Начало сессии
-    end_date = Column(DateTime, nullable=True)       # Конец сессии
-    is_completed = Column(Integer, default=0)        # 0 = идет, 1 = завершена/сдана
-    
+    title = Column(String(100), nullable=True)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    is_completed = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
 
-    # Связь с файлами: если удаляем сессию -> удаляем файлы (cascade)
     files = relationship("SessionFile", back_populates="session", cascade="all, delete-orphan")
-    # Связь с пользователем
     user = relationship("User", back_populates="sessions")
-    
+
     def __repr__(self):
         return f"<Session(id={self.id}, user_id={self.user_id}, completed={self.is_completed})>"
 
@@ -41,15 +34,15 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True, nullable=False) # Telegram ID
+    user_id = Column(Integer, unique=True, nullable=False)  # Telegram ID
     username = Column(String, nullable=True)
     created_at = Column(DateTime, default=func.now())
     status = Column(String, nullable=True)
     
-    # Файлы в базе знаний (загруженные пользователем)
     uploaded_files = relationship("FileDocument", back_populates="uploader", lazy="select")
-    # Учебные сессии пользователя
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+
+    # ❌ УДАЛИЛ: reminders_created (вызывал ошибку связи)
 
     def __init__(self, user_id: int, username: str, status: str):
         self.user_id = user_id
@@ -57,7 +50,6 @@ class User(Base):
         self.status = status
 
     def __repr__(self):
-        # FIX: Было self.telegram_id (ошибка), стало self.user_id
         return f"<User(telegram_id={self.user_id})>"
 
 
@@ -68,23 +60,19 @@ class SessionFile(Base):
     __tablename__ = "session_files"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    
-    # ✅ FIX: Делаем session_id необязательным
     session_id = Column(String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
-    
     original_filename = Column(String(255), nullable=False)
     stored_path = Column(String(500), nullable=False)
     file_size = Column(BigInteger, default=0)
     mime_type = Column(String(100), nullable=True)
-    category = Column(String(50), nullable=True, index=True)  # ✅ Подкатегория: tickets, answers...
-    
+    category = Column(String(50), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Обратная связь (может быть None)
     session = relationship("Session", back_populates="files")
 
     def __repr__(self):
         return f"<SessionFile(id={self.id}, filename={self.original_filename})>"
+
 
 # ==========================================
 # 4. БАЗА ЗНАНИЙ (Общие файлы)
@@ -121,10 +109,12 @@ class Schedule(Base):
     classroom = Column(String, nullable=True)
     teacher = Column(String, nullable=True)
 
+
 class Dispatchers(Base):
     __tablename__ = "dispatchers"
     id = Column(Integer, primary_key=True)
     username = Column(String, nullable=False, unique=True)
+    
     def __init__(self, username: str):
         self.username = username
 
@@ -133,11 +123,11 @@ class Event(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(255), nullable=False)      # Название события
-    event_date = Column(DateTime, nullable=False)    # Дата и время события
-    description = Column(String(1000), nullable=True)  # Описание (опционально)
+    title = Column(String(255), nullable=False)
+    event_date = Column(DateTime, nullable=False)
+    description = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=func.now())
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Кто создал
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     def __repr__(self):
         return f"<Event(id={self.id}, title={self.title}, date={self.event_date})>"
@@ -148,11 +138,28 @@ class Event(Base):
 # ==========================================
 @event.listens_for(SessionFile, "before_delete")
 def receive_before_delete(mapper, connection, target):
-    """
-    Удаляет физический файл с диска перед удалением записи из БД.
-    Срабатывает и при ручном удалении, и при каскадном удалении сессии.
-    """
+    """Удаляет физический файл с диска перед удалением записи из БД"""
     try:
         delete_file(target.stored_path)
     except Exception as e:
         print(f"Error deleting file {target.stored_path}: {e}")
+
+
+# ==========================================
+# 7. НАПОМИНАНИЯ (Исправленная модель)
+# ==========================================
+class Reminder(Base):
+    __tablename__ = "reminders"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    target_user_id = Column(BigInteger, nullable=False, index=True)
+    text = Column(String(1000), nullable=False)
+    send_at = Column(DateTime, nullable=False, index=True)
+    status = Column(Integer, default=0)  # 0=ожидает, 1=отправлено, 2=отменено
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # ✅ FK на users.id
+    created_at = Column(DateTime, default=func.now())
+
+    # ❌ УДАЛИЛ: creator relationship (вызывал ошибку)
+
+    def __repr__(self):
+        return f"<Reminder(id={self.id}, target={self.target_user_id}, time={self.send_at})>"

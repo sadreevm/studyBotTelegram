@@ -11,6 +11,7 @@ from .admin_session_files_handlers import router_session_files_admin
 from .student_session_files_handlers import router_session_files_student
 from .admin_event_handler import router_admin_events
 from .student_event_handler import router_student_events 
+from .admin_reminders import router_reminder_admin
 
 
 routes = [
@@ -22,7 +23,8 @@ routes = [
     router_session_files_admin,
     router_session_files_student,
     router_admin_events,
-    router_student_events 
+    router_student_events,
+    router_reminder_admin
 ]
 
 
