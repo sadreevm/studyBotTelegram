@@ -29,3 +29,10 @@ class FileUpload(StatesGroup):
     waiting_for_category = State()
     waiting_for_file = State()
     waiting_for_filename = State()
+
+
+class SessionFileUpload(StatesGroup):
+    waiting_for_category = State()
+    waiting_for_file = State()  # ← Это ДРУГОЕ состояние, несмотря на одинаковое имя!
+    waiting_for_filename = State()
+

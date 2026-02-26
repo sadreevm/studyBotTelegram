@@ -28,6 +28,8 @@ def save_file(file_bytes: bytes, original_filename: str, category: str) -> str:
     Сохраняет файл и возвращает относительный путь к нему.
     Файлы хранятся по схеме: storage/files/{category}/{unique_id}.{ext}
     """
+
+    print("ya tut suka")
     ext = get_file_extension(original_filename)
     unique_name = f"{uuid.uuid4().hex}.{ext}"
     
@@ -39,6 +41,34 @@ def save_file(file_bytes: bytes, original_filename: str, category: str) -> str:
     
     # Возвращаем относительный путь для БД
     return str(file_path.relative_to(BASE_DIR))
+
+
+def save_session_file(file_bytes: bytes, original_filename: str, category: str) -> str:
+    """
+    Сохраняет файл и возвращает относительный путь к нему.
+    Файлы хранятся по схеме: storage/files/{category}/{unique_id}.{ext}
+    """
+    ext = get_file_extension(original_filename)
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+
+    
+    SESSION_FILES_DIR = BASE_DIR / "storage" / "session_files"
+
+    if not os.path.exists(SESSION_FILES_DIR):
+        os.mkdir(SESSION_FILES_DIR)
+        print("File created")
+    else:
+        print("Folder exists!!!!!!!!!!!")
+
+    category_dir = SESSION_FILES_DIR / category
+    category_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = category_dir / unique_name
+    file_path.write_bytes(file_bytes)
+    
+    # Возвращаем относительный путь для БД
+    return str(file_path.relative_to(BASE_DIR))
+
 
 def get_file_full_path(relative_path: str) -> Path:
     """Получить абсолютный путь к файлу для отправки"""

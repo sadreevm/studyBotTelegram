@@ -9,6 +9,8 @@ from bot.db.database import async_session_maker
 from sqlalchemy import select
 from bot.db.models import Schedule
 
+import logging
+
 
 router_student = Router()
 
@@ -72,7 +74,14 @@ async def show_day_schedule(callback: CallbackQuery):
         await callback.answer()
         return
     
-    await callback.answer()
+    try:
+        await callback.answer()
+    except TelegramBadRequest as e:
+        if "query is too old" in str(e) or "query ID is invalid" in str(e):
+            logger = logging.getLogger(__name__)
+            logger.warning(f"⚠️ Old callback query from user {callback.from_user.id}")
+        else:
+            raise
 
 
 # Возврат назад

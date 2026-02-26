@@ -16,7 +16,7 @@ def get_base():
 # Создание движка и фабрики сессий
 engine = create_async_engine(
     url=get_db_url(),
-    echo=Config.DEBUG == True,  # Включает логирование SQL-запросов (для отладки)
+    echo=Config.DEBUG == False,  # Включает логирование SQL-запросов (для отладки)
     pool_pre_ping=True  # Проверяет соединение перед использованием
 )
 

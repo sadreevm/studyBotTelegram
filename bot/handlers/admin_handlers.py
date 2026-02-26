@@ -72,7 +72,7 @@ async def goto_edit_session_files(callback: CallbackQuery, state: FSMContext):
 async def goto_edit_reminders(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "⏳<b>Редактирование напоминаний для преподавателей</b>\n",
-        reply_markup=Keyboards.get_admin_session_edit_files_keyboard(),
+        reply_markup=Keyboards.get_admin_reminders_keyboard(),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -80,6 +80,17 @@ async def goto_edit_reminders(callback: CallbackQuery, state: FSMContext):
 
 #Редактирование событий
 @router_admin.callback_query(F.data == "admin_edit_events")
+async def goto_edit_events(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "✨<b>Редакирование событий</b>\n",
+        reply_markup=Keyboards.get_admin_events_keyboard(), 
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+#Редактирование событий
+@router_admin.callback_query(F.data == "admin_edit_reminders")
 async def goto_edit_events(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "✨<b>Редакирование событий</b>\n",

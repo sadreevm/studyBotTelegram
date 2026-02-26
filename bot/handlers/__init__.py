@@ -7,6 +7,8 @@ from .admin_handlers import router_admin
 from .student_handlers import router_student
 from .admin_files_handlers import router_files_admin
 from .student_files_handlers import router_files_student
+from .admin_session_files_handlers import router_session_files_admin
+from .student_session_files_handlers import router_session_files_student
 
 
 routes = [
@@ -14,7 +16,9 @@ routes = [
     router_admin,
     router_student,
     router_files_admin,
-    router_files_student
+    router_files_student,
+    router_session_files_admin,
+    router_session_files_student
 ]
 
 
