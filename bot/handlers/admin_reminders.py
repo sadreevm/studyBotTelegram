@@ -149,15 +149,6 @@ async def process_date(message: types.Message, state: FSMContext):
         )
         return
 
-    # Проверка: дата не должна быть в прошлом
-    now = datetime.now()
-    # if parsed_date.replace(hour=0, minute=0, second=0) < now.replace(hour=0, minute=0, second=0):
-    #     await message.answer(
-    #         "❌ **Дата не может быть в прошлом.**\n\n"
-    #         "Пожалуйста, выберите сегодняшнюю или будущую дату:"
-    #     )
-    #     return
-
 
     if parsed_date.date() < datetime.now().date():
         await message.answer("❌ **Дата не может быть в прошлом.**\n\nПожалуйста, введите сегодняшнюю или будущую дату:")
@@ -276,13 +267,13 @@ async def show_reminders_list(callback: types.CallbackQuery, page: int = 1):
     PER_PAGE = 10
     
     async with get_session() as session:
-        # 1️⃣ Считаем общее количество
+        #Считаем общее количество
         count_result = await session.execute(
             select(func.count(Reminder.id)).where(Reminder.status == 0)
         )
         total_count = count_result.scalar_one()
         
-        # 2️⃣ Получаем напоминания с пагинацией
+      
         result = await session.execute(
             select(Reminder)
             .where(Reminder.status == 0)
@@ -292,7 +283,7 @@ async def show_reminders_list(callback: types.CallbackQuery, page: int = 1):
         )
         reminders = result.scalars().all()
         
-        # 3️⃣ 🔥 ВАЖНО: Собираем все created_by и делаем ОДИН запрос за именами
+        
         creator_ids = [r.created_by for r in reminders if r.created_by]
         creators_map = {}
         if creator_ids:
@@ -302,7 +293,7 @@ async def show_reminders_list(callback: types.CallbackQuery, page: int = 1):
             for uid, uname in creators_result.all():
                 creators_map[uid] = uname
 
-    # 4️⃣ Если список пуст
+
     if not reminders:
         await callback.message.edit_text(
             "📭 Нет активных напоминаний\n\n"
@@ -312,12 +303,9 @@ async def show_reminders_list(callback: types.CallbackQuery, page: int = 1):
         await callback.answer()
         return
 
-    # 5️⃣ Формируем текст и клавиатуру
     text = f"🔔 Активные напоминания (стр. {page})\n\n"
-    keyboard = []  # ← Инициализируем ОДИН РАЗ в начале
-
+    keyboard = []  
     for i, reminder in enumerate(reminders, start=(page - 1) * PER_PAGE + 1):
-        # Получаем имя из заранее подготовленного словаря
         creator_name = creators_map.get(reminder.created_by) or "—"
         
         text += (
@@ -328,15 +316,15 @@ async def show_reminders_list(callback: types.CallbackQuery, page: int = 1):
             f"   👨‍💻 Создал: {creator_name}\n\n"
         )
         
-        # 🔘 Кнопка отмены для этого напоминания
+
         keyboard.append([
             types.InlineKeyboardButton(
-                text="❌ Отменить",
+                text=f"❌ Отменить {reminder.id[:8]}...",
                 callback_data=f"admin_cancel_reminder_id_{reminder.id}"
             )
         ])
 
-    # 6️⃣ Пагинация (НЕ перезаписываем keyboard, а добавляем в него!)
+
     total_pages = (total_count + PER_PAGE - 1) // PER_PAGE
     pagination_row = []
     
@@ -387,13 +375,11 @@ async def cancel_specific_reminder(callback: types.CallbackQuery):
     Отмена конкретного напоминания по ID.
     callback_data формат: admin_cancel_reminder_id_{reminder_id}
     """
-    # 1️⃣ Проверка прав
+
     if not await is_admin(callback.from_user.id):
         await callback.answer("⛔ Нет прав!", show_alert=True)
         return
 
-    # 2️⃣ Извлекаем ID напоминания из callback_data
-    # Формат: "admin_cancel_reminder_id_abc-123-def"
     try:
         reminder_id = callback.data.split("_")[-1]
         logger.debug(f"🗑️ Attempting to cancel reminder: {reminder_id}")
@@ -402,29 +388,25 @@ async def cancel_specific_reminder(callback: types.CallbackQuery):
         await callback.answer("⚠️ Ошибка обработки запроса", show_alert=True)
         return
 
-    # 3️⃣ Работа с БД и планировщиком
     async with get_session() as session:
-        # Ищем напоминание (только активное)
         result = await session.execute(
             select(Reminder).where(
                 Reminder.id == reminder_id,
-                Reminder.status == 0  # только если ещё не отправлено
+                Reminder.status == 0  
             )
         )
         reminder = result.scalar_one_or_none()
         
         if not reminder:
             await callback.answer("⚠️ Напоминание не найдено или уже обработано", show_alert=True)
-            # Обновляем список, чтобы пользователь видел актуальное состояние
             await show_reminders_list(callback, page=1)
             return
         
-        # 🗑️ Помечаем как отменённое (status=2)
         reminder.status = 2
         await session.commit()
         logger.info(f"✅ Reminder {reminder_id} marked as cancelled in DB")
 
-    # 4️⃣ Удаляем задачу из APScheduler (если она там есть)
+
     try:
         service = get_reminder_service()
         job_id = f"reminder_{reminder_id}"
@@ -436,13 +418,10 @@ async def cancel_specific_reminder(callback: types.CallbackQuery):
             logger.debug(f"⚠️ Job {job_id} not found in scheduler (maybe already executed?)")
     except Exception as e:
         logger.error(f"❌ Failed to remove job from scheduler: {e}")
-        # Не прерываем выполнение — напоминание уже отменено в БД
+       
 
-    # 5️⃣ Уведомляем пользователя и обновляем список
     await callback.answer("✅ Напоминание отменено", show_alert=True)
     
-    # Возвращаемся к списку (на ту же страницу, если возможно)
-    # Для простоты возвращаем на первую страницу:
     await show_reminders_list(callback, page=1)
 
 
@@ -453,7 +432,6 @@ async def cancel_all_reminders(callback: types.CallbackQuery):
         await callback.answer("⛔ Нет прав!", show_alert=True)
         return
 
-    # Показываем кнопку подтверждения
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [
             types.InlineKeyboardButton(
@@ -487,15 +465,13 @@ async def confirm_cancel_all_reminders(callback: types.CallbackQuery):
     service = get_reminder_service()
     
     async with get_session() as session:
-        # Находим все активные напоминания
         result = await session.execute(
             select(Reminder).where(Reminder.status == 0)
         )
         reminders = result.scalars().all()
         
         for reminder in reminders:
-            reminder.status = 2  # отменено
-            # Удаляем из планировщика
+            reminder.status = 2  
             job_id = f"reminder_{reminder.id}"
             if service.scheduler.get_job(job_id):
                 service.scheduler.remove_job(job_id)

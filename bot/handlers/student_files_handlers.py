@@ -1,4 +1,3 @@
-# bot/handlers/files_student.py
 from aiogram import Router, F, types
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
@@ -112,7 +111,7 @@ async def show_files_in_category(callback: types.CallbackQuery, session: AsyncSe
             )
         ])
     
-    # ✅ Возврат к view_common_files
+
     keyboard.append([InlineKeyboardButton(text="🔙 К категориям", callback_data="view_common_files")])
     
     await callback.message.edit_text(
@@ -126,84 +125,52 @@ async def show_files_in_category(callback: types.CallbackQuery, session: AsyncSe
 # ==========================================
 # 4. СКАЧИВАНИЕ ФАЙЛА
 # ==========================================
-
 @router_files_student.callback_query(F.data.startswith("download_file_"))
 async def download_file(callback: types.CallbackQuery, session: AsyncSession):
-    """Отправляет файл из FileDocument пользователю"""
+    import logging
+    from aiogram.exceptions import TelegramBadRequest
     
-    file_id = int(callback.data.replace("download_file_", ""))
-    
-    doc = await session.get(FileDocument, file_id)
-    
-    if not doc:
-        await callback.answer("❌ Файл не найден", show_alert=True)
-        return
-    
-    file_path = get_file_full_path(doc.file_path)
-    
-    if not file_path.exists():
-        await callback.answer("⚠️ Файл был удалён с сервера", show_alert=True)
-        return
-    
-    # Формируем caption
-    caption = f"📎 {doc.file_name}\n📂 {doc.category}\n💾 {doc.file_size / 1024:.1f} КБ"
+    file_id = callback.data.replace("download_file_", "")
     
     try:
-        # Определяем тип файла и отправляем
-        ext = doc.file_extension.lower()
+        doc = await session.get(FileDocument, file_id)
+        if not doc:
+            try:
+                await callback.answer("❌ Файл не найден", show_alert=True)
+            except TelegramBadRequest:
+                await callback.message.answer("❌ Файл не найден")
+            return
+    
+
+        file_path = get_file_full_path(doc.file_path)
+        if not file_path.exists():
+            try:
+                await callback.answer("❌ Файл не найден на диске", show_alert=True)
+            except TelegramBadRequest:
+                await callback.message.answer("❌ Файл не найден на диске")
+            return
         
-        if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
-            await callback.message.answer_photo(
-                photo=FSInputFile(str(file_path)),
-                caption=caption
-            )
-        else:
-            await callback.message.answer_document(
-                document=FSInputFile(str(file_path)),
-                caption=caption,
-                file_name=doc.file_name  # ✅ Сохраняем оригинальное имя
-            )
         
-        await callback.answer("✅ Файл отправлен!", show_alert=False)
-        
-    except Exception as e:
-        logger.error(f"Error sending file {file_id}: {e}")
-        await callback.answer("❌ Ошибка отправки файла", show_alert=True)
-        return
-    
-    # ✅ Обновляем сообщение со списком файлов
-    category = doc.category or "other"
-    stmt = select(FileDocument).where(
-        FileDocument.category == category
-    ).order_by(desc(FileDocument.uploaded_at)).limit(20)
-    
-    result = await session.execute(stmt)
-    files = result.scalars().all()
-    
-    file_list = "\n".join([
-        f"📄 <b>{f.file_name}</b>\n"
-        f"   <i>💾 {f.file_size / 1024:.1f} КБ</i>"
-        for f in files[:10]
-    ])
-    
-    keyboard = []
-    for f in files[:10]:
-        short_name = f.file_name[:25] + "..." if len(f.file_name) > 25 else f.file_name
-        keyboard.append([
-            InlineKeyboardButton(text=f"📥 {short_name}", callback_data=f"download_file_{f.id}")
-        ])
-    keyboard.append([InlineKeyboardButton(text="🔙 К категориям", callback_data="view_common_files")])
-    
-    try:
-        await callback.message.edit_text(
-            f"📂 <b>Категория:</b> <code>{category}</code>\n\n{file_list}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+        await callback.message.answer_document(
+            document=types.FSInputFile(str(file_path)),
+            caption=f"📄 {doc.file_name}\n📂 Категория: {doc.category}",
             parse_mode="HTML"
         )
+        
+        
+        try:
+            await callback.answer("✅ Файл отправлен!", show_alert=False)
+        except TelegramBadRequest as e:
+            
+            logging.info(f"⚠️ Callback query expired (нормально): {e}")
+            
+            
     except Exception as e:
-        logger.warning(f"Could not edit message after download: {e}")
-        # Игнорируем, если сообщение нельзя отредактировать
-
+        logging.error(f"Download error: {e}")
+        try:
+            await callback.answer("❌ Ошибка отправки файла", show_alert=True)
+        except TelegramBadRequest:
+            await callback.message.answer("❌ Ошибка отправки файла")
 
 # ==========================================
 # 5. ОТПРАВКА ПО ID (для прямых ссылок)

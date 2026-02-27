@@ -1,4 +1,3 @@
-# bot/handlers/student_events.py
 import logging
 from datetime import datetime
 from aiogram import Router, F, types
@@ -97,7 +96,7 @@ async def show_events_inline(callback: types.CallbackQuery, session: AsyncSessio
     await callback.message.edit_text(
         f"📅 <b>Афиша событий</b>\n\n{event_list}",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 В меню", callback_data="student_main_menu")]
+            [InlineKeyboardButton(text="🔙 В меню", callback_data="get_student_main_keyboard")]
         ]),
         parse_mode="HTML"
     )

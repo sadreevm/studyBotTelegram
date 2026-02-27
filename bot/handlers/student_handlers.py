@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
+from aiogram.fsm.context import FSMContext
+
 from bot.utils.filters import IsStudent
 from bot.utils.keyboards import Keyboards, DAYS
 from bot.db.database import async_session_maker
@@ -83,6 +85,17 @@ async def show_day_schedule(callback: CallbackQuery):
             logger.warning(f"⚠️ Old callback query from user {callback.from_user.id}")
         else:
             raise
+
+
+
+@router_student.callback_query(F.data == "goto_back_student")
+async def goto_admin_panel(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "👨‍🏫 <b>Панель студента:</b>\n",
+        reply_markup=Keyboards.get_student_main_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 # Возврат назад

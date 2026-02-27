@@ -7,11 +7,16 @@ from aiogram.filters import StateFilter
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
+
+import asyncio
+from functools import partial
+import shutil 
 
 # Импорт моделей
 from bot.db.models import SessionFile, User
 # Импорт утилит
-from bot.utils.file_storage import allowed_file, get_file_full_path, delete_file, save_session_file
+from bot.utils.file_storage import allowed_file, get_file_full_path, delete_file_async, save_session_file
 from bot.utils.keyboards import Keyboards
 from bot.utils.state import SessionFileUpload
 
@@ -26,7 +31,7 @@ router_session_files_admin = Router()
 @router_session_files_admin.callback_query(F.data == "admin_add_session_files")
 async def start_session_file_upload(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     """Админ нажал 'Добавить файлы для сессии' → сразу спрашиваем категорию"""
-    
+    await state.clear()
     # Проверка прав
     stmt = select(User).where(User.user_id == callback.from_user.id)
     result = await session.execute(stmt)
@@ -47,7 +52,6 @@ async def start_session_file_upload(callback: types.CallbackQuery, state: FSMCon
         parse_mode="HTML"
     )
     await callback.answer()
-    # ✅ Сразу переходим в состояние ожидания категории
     await state.set_state(SessionFileUpload.waiting_for_category)
 
 
@@ -73,6 +77,36 @@ async def session_category_selected(callback: types.CallbackQuery, state: FSMCon
         parse_mode="HTML"
     )
     await callback.answer()
+
+
+
+@router_session_files_admin.message(SessionFileUpload.waiting_for_category, F.text)
+async def sesseion_category_text_received(message: types.Message, state: FSMContext):
+    """Обработчик, когда пользователь пишет название категории текстом"""
+    import re
+    
+    category = message.text.strip().lower()
+    
+    # Валидация: только латиница, цифры, подчёркивание, дефис (без пробелов!)
+    if not re.match(r'^[a-z0-9_-]+$', category):
+        await message.answer(
+            "❌ Категория должна содержать только латинские буквы, цифры, _ или -\n"
+            "Пример: <code>math_exams</code>, <code>prog2024</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Сохраняем категорию и переходим к ожиданию файла
+    await state.update_data(category=category)
+    await state.set_state(SessionFileUpload.waiting_for_file)
+    
+    await message.answer(
+        f"📎 <b>Категория:</b> <code>{category}</code>\n\n"
+        "📤 <b>Отправьте файл:</b>\n"
+        "📄 Документы, изображения, архивы\n"
+        "📏 Макс. размер: 20 МБ",
+        parse_mode="HTML"
+    )
 
 
 # ==========================================
@@ -115,24 +149,21 @@ async def session_file_received(message: types.Message, state: FSMContext, sessi
     data = await state.get_data()
     category = data.get("category", "other")  # например, "tickets"
 
-    # ✅ FIX: Формируем ПОЛНЫЙ путь для save_file
-    # Это создаст папку: storage/files/session_files/tickets/
     storage_path = f"{category}"
 
-    # ✅ ЛОГИРУЕМ перед сохранением
+
     logger.info(f"🔍 About to save file with storage_path: {storage_path}")
 
     try:
-        relative_path = save_session_file(file_bytes, original_name, storage_path)
+        relative_path = await save_session_file(file_bytes, original_name, storage_path)
     except Exception as e:
         logger.error(f"File save error: {e}")
         await message.answer("❌ Ошибка при сохранении файла на сервер")
         return
-    
+   
 
     # --- 3. Сохраняем метаданные в FSM ---
     await state.update_data(
-        file_bytes=file_bytes,
         original_name=original_name,
         file_size=file_size,
         file_ext=file_ext,
@@ -183,25 +214,36 @@ async def session_filename_received(message: types.Message, state: FSMContext, s
             new_rel_path = relative_path.replace(original_name, new_filename)
             new_abs_path = get_file_full_path(new_rel_path)
             
+            loop = asyncio.get_event_loop()
             try:
-                os.rename(old_abs_path, new_abs_path)
+                await loop.run_in_executor(None, partial(shutil.move, str(old_abs_path), str(new_abs_path)))
                 relative_path = new_rel_path
                 final_filename = new_filename
             except Exception as e:
                 logger.error(f"Rename error: {e}")
+                await message.answer("⚠️ Файл сохранён, но переименовать не удалось")
 
-    # ✅ Создаем запись в БД БЕЗ session_id
+
+
     new_db_file = SessionFile(
-        session_id=None,  # ✅ Нет привязки к сессии
+        session_id=None, 
         original_filename=final_filename,
         stored_path=relative_path,
         file_size=file_size,
         category=category
     )
     
-    session.add(new_db_file)
-    await session.commit()
     
+    try:
+        session.add(new_db_file)
+        await session.commit()
+    except SQLAlchemyError as e:
+        logging.error(f"Database error: {e}")
+        await session.rollback()
+        await message.answer("❌ Ошибка базы данных")
+        return
+
+
     await state.clear()
     
     await message.answer(
@@ -220,7 +262,7 @@ async def session_skip_filename(callback: types.CallbackQuery, state: FSMContext
     data = await state.get_data()
     
     new_db_file = SessionFile(
-        session_id=None,  # ✅ Нет привязки к сессии
+        session_id=None, 
         original_filename=data.get("original_name"),
         stored_path=data.get("relative_path"),
         file_size=data.get("file_size"),
@@ -246,10 +288,6 @@ async def session_skip_filename(callback: types.CallbackQuery, state: FSMContext
 # 5. ОТМЕНА ЗАГРУЗКИ (CLEANUP)
 # ==========================================
 
-# ==========================================
-# 6. ОТМЕНА ЗАГРУЗКИ (CLEANUP)
-# ==========================================
-
 @router_session_files_admin.callback_query(F.data == "cancel_upload")
 async def session_cancel_upload(callback: types.CallbackQuery, state: FSMContext):
     """Отмена загрузки с удалением временного файла с диска"""
@@ -261,7 +299,7 @@ async def session_cancel_upload(callback: types.CallbackQuery, state: FSMContext
     # Если файл уже сохранён на диск — удаляем его
     if data.get("relative_path"):
         try:
-            delete_file(data.get("relative_path"))
+            await delete_file_async(data.get("relative_path"))
             logger.info(f"✅ Deleted temp file: {data.get('relative_path')}")
         except Exception as e:
             logger.error(f"❌ Error deleting temp file: {e}")
@@ -307,7 +345,7 @@ async def show_session_files_for_delete(callback: types.CallbackQuery, session: 
         await callback.answer("❌ Нет прав", show_alert=True)
         return
 
-    # ✅ Получаем ВСЕ файлы из session_files (без фильтра по сессии)
+
     stmt_files = select(SessionFile).order_by(SessionFile.created_at.desc()).limit(50)
     result_files = await session.execute(stmt_files)
     files = result_files.scalars().all()
@@ -377,17 +415,17 @@ async def execute_delete_session_file(callback: types.CallbackQuery, session: As
         await show_session_files_for_delete(callback, session)
         return
     
-    # ✅ 1. Удаляем с диска
-    delete_file(file_to_delete.stored_path)
+
+    await delete_file_async(file_to_delete.stored_path)
     
-    # ✅ 2. Удаляем из БД
+
     await session.delete(file_to_delete)
     await session.commit()
     
-    # ✅ 3. Уведомление + возврат к списку
+
     await callback.answer(f"✅ {file_to_delete.original_filename} удалён", show_alert=False)
     await show_session_files_for_delete(callback, session)
-    await callback.message.edit_text(
+    await callback.message.answer(
         "👨‍🏫 <b>Панель старосты:</b>",
         reply_markup=Keyboards.get_admin_main_keyboard(),
         parse_mode="HTML"

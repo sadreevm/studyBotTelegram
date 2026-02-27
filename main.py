@@ -11,13 +11,14 @@ from bot.handlers import routes
 from bot.db.database import init_db, async_session_maker
 from bot.middlewares.database import DatabaseMiddleware
 
+from aiogram.client.session.aiohttp import AiohttpSession
+
 from bot.utils.reminder_service import (
     init_reminder_service,
     shutdown_reminder_service
 )
 
 
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -25,7 +26,7 @@ logging.basicConfig(
 )
 
 storage = MemoryStorage()
-
+session = AiohttpSession(timeout=60)
 bot = Bot(
     token=Config.TELEGRAM_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -38,7 +39,6 @@ dp.update.middleware(DatabaseMiddleware(async_session_maker))
 
 async def on_startup():
     """Выполняется при запуске бота"""
-    # ✅ Инициализируем сервис через функцию
     await init_reminder_service(bot)
     logging.info("✅ Reminder service started via init function")
 

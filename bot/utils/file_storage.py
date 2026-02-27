@@ -1,86 +1,101 @@
-import os
+import logging
 import uuid
 from pathlib import Path
-from typing import Optional
+import aiofiles  
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FILES_DIR = BASE_DIR / "storage" / "files"
-
-# Разрешённые расширения
 ALLOWED_EXTENSIONS = {
-    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',  # Office
-    'txt', 'rtf', 'odt', 'ods', 'odp',                   # OpenOffice
-    'png', 'jpg', 'jpeg', 'gif', 'webp',                 # Images
-    'zip', 'rar', '7z', 'tar', 'gz',                     # Archives
-    'py', 'js', 'java', 'cpp', 'c', 'h', 'sql', 'md',   # Code
+    # Документы
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    'txt', 'rtf', 'odt', 'ods', 'odp', 'csv',
+    # Изображения
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+    # Архивы
+    'zip', 'rar', '7z', 'tar', 'gz', 'bz2',
+    # Код
+    'py', 'js', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'go', 'rs',
+    'sql', 'sh', 'bash', 'ps1', 'md', 'json', 'xml', 'yaml', 'yml',
 }
 
+
 def allowed_file(filename: str) -> bool:
-    """Проверка расширения файла"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """
+    Проверка расширения файла (регистронезависимая).
+    Возвращает True, если расширение в ALLOWED_EXTENSIONS.
+    """
+    if not filename or '.' not in filename:
+        return False
+    
+    # Получаем расширение и приводим к нижнему регистру
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
 
 def get_file_extension(filename: str) -> str:
     """Получить расширение файла в нижнем регистре"""
-    return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    if not filename or '.' not in filename:
+        return ''
+    return filename.rsplit('.', 1)[1].lower()
 
-def save_file(file_bytes: bytes, original_filename: str, category: str) -> str:
-    """
-    Сохраняет файл и возвращает относительный путь к нему.
-    Файлы хранятся по схеме: storage/files/{category}/{unique_id}.{ext}
-    """
 
-    print("ya tut suka")
+async def save_file(file_bytes: bytes, original_filename: str, category: str) -> str:
+    """Асинхронное сохранение через aiofiles"""
     ext = get_file_extension(original_filename)
     unique_name = f"{uuid.uuid4().hex}.{ext}"
     
     category_dir = FILES_DIR / category
-    category_dir.mkdir(parents=True, exist_ok=True)
+    category_dir.mkdir(parents=True, exist_ok=True)  # mkdir синхронный, но быстрый
     
     file_path = category_dir / unique_name
-    file_path.write_bytes(file_bytes)
     
-    # Возвращаем относительный путь для БД
+    # Асинхронная запись!
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(file_bytes)
+    
     return str(file_path.relative_to(BASE_DIR))
 
 
-def save_session_file(file_bytes: bytes, original_filename: str, category: str) -> str:
-    """
-    Сохраняет файл и возвращает относительный путь к нему.
-    Файлы хранятся по схеме: storage/files/{category}/{unique_id}.{ext}
-    """
+async def save_session_file(file_bytes: bytes, original_filename: str, category: str) -> str:
+    SESSION_FILES_DIR = BASE_DIR / "storage" / "session_files"
     ext = get_file_extension(original_filename)
     unique_name = f"{uuid.uuid4().hex}.{ext}"
-
     
-    SESSION_FILES_DIR = BASE_DIR / "storage" / "session_files"
-
-    if not os.path.exists(SESSION_FILES_DIR):
-        os.mkdir(SESSION_FILES_DIR)
-        print("File created")
-    else:
-        print("Folder exists!!!!!!!!!!!")
-
     category_dir = SESSION_FILES_DIR / category
     category_dir.mkdir(parents=True, exist_ok=True)
     
     file_path = category_dir / unique_name
-    file_path.write_bytes(file_bytes)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(file_bytes)
     
-    # Возвращаем относительный путь для БД
     return str(file_path.relative_to(BASE_DIR))
 
 
 def get_file_full_path(relative_path: str) -> Path:
-    """Получить абсолютный путь к файлу для отправки"""
     return BASE_DIR / relative_path
 
-def delete_file(relative_path: str) -> bool:
-    """Удалить файл с диска"""
+
+async def delete_file_async(relative_path: str) -> bool:
+    """Асинхронное удаление — используйте в async-коде"""
     try:
-        file_path = get_file_full_path(relative_path)
+        file_path = BASE_DIR / relative_path
         if file_path.exists():
             file_path.unlink()
-            # Опционально: удалить пустую папку категории
+            category_dir = file_path.parent
+            if not any(category_dir.iterdir()):
+                category_dir.rmdir()
+            return True
+    except Exception as e:
+        logging.error(f"Delete error: {e}")
+    return False
+
+
+def delete_file(relative_path: str) -> bool:
+    """Синхронное удаление — ТОЛЬКО для sync-кода!"""
+    try:
+        file_path = BASE_DIR / relative_path
+        if file_path.exists():
+            file_path.unlink()
             category_dir = file_path.parent
             if not any(category_dir.iterdir()):
                 category_dir.rmdir()
@@ -88,10 +103,3 @@ def delete_file(relative_path: str) -> bool:
     except Exception:
         pass
     return False
-
-
-def sanitize_filename(filename: str) -> str:
-    """Очищает имя файла от опасных символов"""
-    # Разрешаем: буквы, цифры, точка, подчёркивание, дефис, пробел
-    safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
-    return safe_name.strip()

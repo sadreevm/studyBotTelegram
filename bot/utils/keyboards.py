@@ -1,5 +1,3 @@
-# bot/utils/keyboards.py
-
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 
@@ -131,6 +129,19 @@ class Keyboards:
         keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="goto_back")])
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+
+    @staticmethod
+    def get_student_main_keyboard() -> InlineKeyboardMarkup:
+        keyboard = [
+            [InlineKeyboardButton(text="⏰ Смотреть расписание", callback_data="admin_edit_schedule")],
+            [InlineKeyboardButton(text="📚 Смотреть общие материалы", callback_data="admin_edit_common_files")],
+            [InlineKeyboardButton(text="📝 Смотреть материалы для сессии", callback_data="admin_edit_session_files")],
+            [InlineKeyboardButton(text="⏳ Смотреть напоминания", callback_data="admin_edit_reminders")],
+            [InlineKeyboardButton(text="✨ Смотреть события", callback_data="admin_edit_events")],
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
     @staticmethod
     def get_student_days_keyboard(action: str = "view", from_menu: str = "main") -> InlineKeyboardMarkup:
         keyboard = []
@@ -201,7 +212,7 @@ class Keyboards:
             keyboard.append([
                 InlineKeyboardButton(text=f"📁 {cat}", callback_data=f"{prefix}{cat}")
             ])
-        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="student_main_menu")])
+        # keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="get_student_main_keyboard")])
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     @staticmethod
@@ -217,7 +228,7 @@ class Keyboards:
             [InlineKeyboardButton(text=name, callback_data=f"session_files_in_{cat}")]
             for name, cat in categories
         ]
-        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="student_main_menu")])
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="get_student_main_keyboard")])
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     # ==========================================
